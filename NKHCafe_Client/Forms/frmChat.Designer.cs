@@ -87,14 +87,14 @@
             this.btnConnect.TabIndex = 5;
             this.btnConnect.Text = "Kết nối";
             this.btnConnect.UseVisualStyleBackColor = true;
-            this.btnConnect.Click += new System.EventHandler(this.btnConnect_Click);
+            //this.btnConnect.Click += new System.EventHandler(this.btnConnect_Click);
             // 
             // lblServerIP
             // 
             this.lblServerIP.AutoSize = true;
             this.lblServerIP.Location = new System.Drawing.Point(12, 15);
             this.lblServerIP.Name = "lblServerIP";
-            this.lblServerIP.Size = new System.Drawing.Size(67, 16);
+            this.lblServerIP.Size = new System.Drawing.Size(65, 16);
             this.lblServerIP.TabIndex = 6;
             this.lblServerIP.Text = "Server IP:";
             // 

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Data.SqlClient;
+using System.Net.Sockets;
 
 
 namespace NKHCafe_Client.Forms
@@ -110,6 +111,8 @@ namespace NKHCafe_Client.Forms
                     return;
                 }
 
+                NotifyServerOpen(idMay);
+
                 // 3. Mở form chính
                 this.Hide();
                 using (frmClientMain frmMain = new frmClientMain(idTaiKhoan, tenDN, soDu, idMay))
@@ -123,6 +126,33 @@ namespace NKHCafe_Client.Forms
                 MessageBox.Show("Lỗi khi đăng nhập: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+        // Client-side
+        private void NotifyServerOpen(int idMay)
+        {
+            try
+            {
+                TcpClient client = new TcpClient("127.0.0.1", 8888); // IP & Port của server
+                NetworkStream stream = client.GetStream();
+
+                string message = $"OPEN:{idMay}";
+                byte[] data = Encoding.ASCII.GetBytes(message);
+                stream.Write(data, 0, data.Length);
+
+                // (Tùy chọn) Nhận phản hồi
+                byte[] buffer = new byte[1024];
+                int bytes = stream.Read(buffer, 0, buffer.Length);
+                string response = Encoding.ASCII.GetString(buffer, 0, bytes);
+                Console.WriteLine("Server response: " + response);
+
+                stream.Close();
+                client.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Lỗi khi gửi OPEN command: " + ex.Message);
+            }
+        }
+
 
         private void btnThoat_Click(object sender, EventArgs e)
         {
