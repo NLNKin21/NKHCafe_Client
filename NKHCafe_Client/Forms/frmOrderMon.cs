@@ -11,11 +11,18 @@ using System.Windows.Forms;
 using NKHCafe_Client.Models;
 using NKHCafe_Client.Network;
 using System.Diagnostics;
+using System.IO;
+using System.Net.Sockets;
+using NKHCafe_Client.Utils;
+using Newtonsoft.Json;
 
 namespace NKHCafe_Client.Forms
 {
     public partial class frmOrderMon : Form
     {
+
+        public static string serverIp = "127.0.0.1"; // hoặc IP LAN của server
+        public static int serverPort = 8888;
         // Biến thành viên để lưu thông tin cần thiết
         private int _idTaiKhoan;
         private int _idMay;
@@ -181,81 +188,129 @@ namespace NKHCafe_Client.Forms
 
         private void btnXacNhanOrder_Click(object sender, EventArgs e)
         {
-            if (_gioHang.Count == 0)
+            GuiYeuCauOrderQuaSocket(); // Gọi hàm xử lý mới
+        }
+
+        private void GuiYeuCauOrderQuaSocket()
+        {
+            if (dgvGioHang.Rows.Count == 0)
             {
-                MessageBox.Show("Giỏ hàng trống. Vui lòng chọn món.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Giỏ hàng đang trống.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            // Kiểm tra lại kết nối socket trước khi gửi
-            if (_socketClient == null || !_socketClient.IsConnected)
+            var hoaDonRequest = new YeuCauOrder
             {
-                MessageBox.Show("Mất kết nối đến server. Không thể gửi order.", "Lỗi Kết Nối", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            // --- Gửi từng món trong giỏ hàng thành các message riêng ---
-            bool allSentSuccessfully = true;
-            List<string> failedItems = new List<string>();
+                IdTaiKhoan = _idTaiKhoan,
+                IdMay = _idMay,
+                ChiTiet = new List<ChiTietOrder>()
+            };
 
             try
             {
-                Debug.WriteLine($"Sending {_gioHang.Count} order items...");
-                foreach (ChiTietOrder item in _gioHang)
+                foreach (DataGridViewRow row in dgvGioHang.Rows)
                 {
-                    // Tạo message yêu cầu đặt món cho từng item
-                    string message = MessageHandler.CreateOrderRequestMessage(
-                        _idTaiKhoan,
-                        _idMay,
-                        item.IDMon,
-                        item.SoLuong
-                    );
+                    if (row.IsNewRow) continue;
 
-                    // Gửi message qua socket
-                    bool sent = _socketClient.Send(message);
+                    int idMon;
+                    string tenMon = row.Cells["TenMon"].Value?.ToString();
+                    int soLuong;
+                    decimal donGia;
 
-                    if (!sent)
+                    bool idValid = int.TryParse(row.Cells["IDMon"].Value?.ToString(), out idMon);
+                    bool slValid = int.TryParse(row.Cells["SoLuong"].Value?.ToString(), out soLuong);
+                    bool giaValid = decimal.TryParse(row.Cells["DonGia"].Value?.ToString(), out donGia);
+
+                    if (!idValid || string.IsNullOrEmpty(tenMon) || !slValid || !giaValid || soLuong <= 0)
                     {
-                        allSentSuccessfully = false;
-                        failedItems.Add($"{item.TenMon} (SL: {item.SoLuong})");
-                        Debug.WriteLine($"Failed to send order for item {item.IDMon}");
-                        // Có thể dừng ngay khi có lỗi hoặc cố gắng gửi hết
-                        // break; // Bỏ comment nếu muốn dừng ngay
+                        Console.WriteLine($"Cảnh báo: Bỏ qua dòng {row.Index} trong giỏ hàng do dữ liệu không hợp lệ.");
+                        continue;
                     }
-                    else
-                    {
-                        Debug.WriteLine($"Sent order request for item {item.IDMon}");
-                    }
+
+                    hoaDonRequest.ChiTiet.Add(new ChiTietOrder(idMon, tenMon, soLuong, donGia));
                 }
 
-                // --- Xử lý kết quả sau khi gửi ---
-                if (allSentSuccessfully)
+                if (!hoaDonRequest.ChiTiet.Any())
                 {
-                    MessageBox.Show("Đã gửi yêu cầu order thành công!", "Thông Báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    _gioHang.Clear(); // Xóa giỏ hàng trên client sau khi gửi thành công
-                    HienThiGioHang();
-                    this.Close(); // Đóng form order
-                }
-                else
-                {
-                    string errorMessage = "Gửi yêu cầu thất bại cho các món sau:\n - " + string.Join("\n - ", failedItems);
-                    MessageBox.Show(errorMessage, "Lỗi Gửi Order", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    // Không xóa giỏ hàng để người dùng có thể thử lại
+                    MessageBox.Show("Không có món hợp lệ nào trong giỏ hàng để gửi đi.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Lỗi khi gửi order: {ex.Message}");
-                MessageBox.Show("Đã xảy ra lỗi trong quá trình gửi order: " + ex.Message, "Lỗi Hệ Thống", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Lỗi khi xử lý giỏ hàng: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            string jsonBody;
+            string commandRequest;
+            try
+            {
+                jsonBody = JsonConvert.SerializeObject(hoaDonRequest);
+                commandRequest = "HOADONDOAN|" + jsonBody;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi tạo dữ liệu JSON: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Gửi socket
+            TcpClient client = null;
+            NetworkStream stream = null;
+            try
+            {
+                client = new TcpClient();
+                client.Connect(serverIp, serverPort);
+                stream = client.GetStream();
+
+                byte[] dataToSend = Encoding.UTF8.GetBytes(commandRequest);
+                stream.Write(dataToSend, 0, dataToSend.Length);
+
+                byte[] buffer = new byte[1024];
+                int bytesRead = stream.Read(buffer, 0, buffer.Length);
+                string response = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+                string[] parts = response.Split('|');
+                if (parts.Length >= 2)
+                {
+                    string command = parts[0].Trim();
+                    string status = parts[1].Trim();
+                    string message = parts.Length >= 3 ? parts[2].Trim() : "";
+
+                    if (command == "ORDER_CONFIRMATION" && status == "OK")
+                    {
+                        MessageBox.Show("Đã gửi yêu cầu Order thành công!\n" + message, "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        dgvGioHang.DataSource = null;
+                        dgvGioHang.Rows.Clear();
+                    }
+                    else
+                    {
+                        MessageBox.Show($"Phản hồi từ server: {status}\n{message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Phản hồi từ server không hợp lệ:\n" + response, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi gửi dữ liệu: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                stream?.Close();
+                client?.Close();
             }
         }
 
-        // Không cần phương thức GetOrCreateHoaDon ở client nữa
-        // private int GetOrCreateHoaDon(int idTaiKhoan, int idMay) { ... }
+            // Không cần phương thức GetOrCreateHoaDon ở client nữa
+            // private int GetOrCreateHoaDon(int idTaiKhoan, int idMay) { ... }
 
 
-        // --- Thêm xử lý sự kiện cho nút xóa khỏi giỏ hàng (nếu có) ---
-        private void btnXoaKhoiGio_Click(object sender, EventArgs e)
+            // --- Thêm xử lý sự kiện cho nút xóa khỏi giỏ hàng (nếu có) ---
+            private void btnXoaKhoiGio_Click(object sender, EventArgs e)
         {
             if (dgvGioHang.CurrentRow != null)
             {
@@ -284,6 +339,9 @@ namespace NKHCafe_Client.Forms
             }
         }
 
+        private void dgvThucDon_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
 
+        }
     } 
 } 

@@ -120,6 +120,7 @@
             this.dgvOrder.RowTemplate.Height = 24;
             this.dgvOrder.Size = new System.Drawing.Size(772, 229);
             this.dgvOrder.TabIndex = 8;
+            this.dgvOrder.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvOrder_CellContentClick);
             // 
             // label1
             // 
@@ -127,9 +128,9 @@
             this.label1.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label1.Location = new System.Drawing.Point(16, 183);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(144, 20);
+            this.label1.Size = new System.Drawing.Size(102, 20);
             this.label1.TabIndex = 7;
-            this.label1.Text = "Danh sách đã order";
+            this.label1.Text = "MENU GAME";
             // 
             // btnChat
             // 

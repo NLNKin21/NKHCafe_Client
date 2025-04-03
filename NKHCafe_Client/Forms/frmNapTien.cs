@@ -131,5 +131,10 @@ namespace NKHCafe_Client.Forms
             nudSoTien.Select(0, nudSoTien.Text.Length); // Chọn toàn bộ text để dễ ghi đè
             nudSoTien.Focus();
         }
+
+        private void nudSoTien_ValueChanged(object sender, EventArgs e)
+        {
+
+        }
     }
 }

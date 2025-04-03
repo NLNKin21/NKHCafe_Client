@@ -29,6 +29,10 @@ namespace NKHCafe_Client.Forms
         private SocketClient _socketClient;
         private bool _isManuallyClosing = false;
 
+
+        private DateTime _lastChargeTime; // Thời điểm trừ tiền gần nhất
+        private const decimal PhiMoi2Phut = 250m; // Số tiền trừ mỗi 2 phút
+
         public int IDTaiKhoan => _idTaiKhoan;
         public int IDMay => _idMay;
 
@@ -49,13 +53,14 @@ namespace NKHCafe_Client.Forms
             this.Text = $"Máy: {tenMay} - Đang kết nối...";
 
             InitializeSocketClient();
-
+            LoadOrderData();
             if (_socketClient != null && _socketClient.IsConnected)
             {
                 BatDauTinhGio();
                 UpdateUIForConnectedState(true);
                 this.Text = $"Máy: {tenMay}"; // Update title on success
-                LoadDanhSachOrder(); // Load orders after connection and timer start
+                //LoadDanhSachOrder(); // Load orders after connection and timer start
+                LoadOrderData();
             }
             else
             {
@@ -381,50 +386,43 @@ namespace NKHCafe_Client.Forms
 
         private void Timer_Tick(object sender, EventArgs e)
         {
-            if (this.IsDisposed) { _timer?.Stop(); return; } // Stop timer if form is disposed
+            if (this.IsDisposed) return;
 
-            try
+            TimeSpan thoiGianSuDung = DateTime.Now - _thoiGianBatDau;
+
+            // ✅ Giả sử: 250 VNĐ = 1 phút
+            double tongPhutConLai = (double)_soDu / 250.0;
+            TimeSpan thoiGianConLai = TimeSpan.FromMinutes(tongPhutConLai) - thoiGianSuDung;
+
+            if (thoiGianConLai < TimeSpan.Zero)
+                thoiGianConLai = TimeSpan.Zero;
+
+            // ✅ Cập nhật UI
+            lblThoiGian.Text = $"Thời gian sử dụng: {thoiGianSuDung:hh\\:mm\\:ss}";
+            lblThoiGianConLai.Text = $"Thời gian còn lại: {thoiGianConLai:hh\\:mm\\:ss}";
+
+            // Khởi tạo mốc nếu lần đầu
+            if (_lastChargeTime == default)
+                _lastChargeTime = _thoiGianBatDau;
+
+            // ✅ Trừ tiền mỗi 2 phút (hoặc 1 phút nếu bạn muốn)
+            if ((DateTime.Now - _lastChargeTime).TotalMinutes >= 1)
             {
-                TimeSpan thoiGianSuDung = DateTime.Now - _thoiGianBatDau;
-                decimal giaMoiGio = 10000m;
-                decimal giaMoiGiay = giaMoiGio / 3600m;
-                decimal soDuHienTai = _soDu;
-                decimal soGiayConLai = (soDuHienTai > 0 && giaMoiGiay > 0.00001m) ? soDuHienTai / giaMoiGiay : 0;
-                TimeSpan thoiGianConLai = TimeSpan.FromSeconds((double)soGiayConLai);
-
-                // Update Labels on UI Thread
-                Action updateLabels = () => {
-                    if (!lblThoiGian.IsDisposed) lblThoiGian.Text = "Sử dụng: " + thoiGianSuDung.ToString(@"hh\:mm\:ss");
-                    if (this.Controls.ContainsKey("lblThoiGianConLai") && !this.Controls["lblThoiGianConLai"].IsDisposed)
-                        this.Controls["lblThoiGianConLai"].Text = "Còn lại: " + thoiGianConLai.ToString(@"hh\:mm\:ss");
-                };
-                if (this.InvokeRequired) { try { this.Invoke(updateLabels); } catch { /* ignore disposed */ } }
-                else { updateLabels(); }
-
-
-                if (soDuHienTai <= 0 && thoiGianSuDung.TotalSeconds > 5)
+                if (_soDu >= PhiMoi2Phut)
                 {
-                    Debug.WriteLine("Out of balance detected in Timer_Tick.");
-                    _timer?.Stop();
-                    MessageBox.Show("Hết tiền! Phiên sử dụng sẽ kết thúc.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    KetThucPhien();
-                    return;
-                }
+                    _soDu -= PhiMoi2Phut;
+                    CapNhatSoDuHienThi();
+                    _lastChargeTime = DateTime.Now;
 
-                if (thoiGianConLai.TotalMinutes <= 5 && thoiGianConLai.TotalSeconds > 0 && !_daThongBaoHetGio)
-                {
-                    _daThongBaoHetGio = true; // Set flag before showing MessageBox
-                    MessageBox.Show("Số dư của bạn sắp hết (còn dưới 5 phút sử dụng).", "Cảnh Báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Debug.WriteLine($"Đã trừ {PhiMoi2Phut:N0} VNĐ. Số dư còn lại: {_soDu:N0}");
                 }
-                else if (thoiGianConLai.TotalMinutes > 5)
+                else if (!_daThongBaoHetGio)
                 {
-                    _daThongBaoHetGio = false;
+                    _daThongBaoHetGio = true;
+                    MessageBox.Show("Số dư không đủ, vui lòng nạp thêm để tiếp tục sử dụng!", "Hết số dư", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    _timer.Stop();
+                    // Gọi logout hoặc xử lý tắt máy tại đây nếu cần
                 }
-            }
-            catch (Exception ex)
-            {
-                _timer?.Stop();
-                Debug.WriteLine($"Lỗi trong Timer_Tick: {ex.Message}");
             }
         }
 
@@ -441,7 +439,7 @@ namespace NKHCafe_Client.Forms
                 try
                 {
                     TimeSpan tongThoiGianSuDung = DateTime.Now - _thoiGianBatDau;
-                    decimal giaMoiGio = 10000m;
+                    decimal giaMoiGio = 15000m;
                     decimal tongTienSuDung = Math.Max(0, (decimal)tongThoiGianSuDung.TotalHours * giaMoiGio);
                     tongTienSuDung = Math.Round(tongTienSuDung, 0);
 
@@ -579,6 +577,38 @@ namespace NKHCafe_Client.Forms
                 string logoutMsg = MessageHandler.CreateLogoutRequestMessage(_idTaiKhoan, _idMay);
                 _socketClient?.Send(logoutMsg); // Notify server (optional)
                 KetThucPhien(); // End session with client DB updates
+            }
+        }
+
+        private void dgvOrder_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+
+        }
+        private void LoadOrderData()
+        {
+            // Chuỗi kết nối đến SQL Server - sửa lại theo cấu hình của bạn
+            string connectionString = @"Data Source=LAPTOP-5V6TA3CH\NGUYENLONGNHAT;Initial Catalog=QLTiemNET;Integrated Security=True";
+
+            // Câu truy vấn SQL
+            string query = @"SELECT TOP (1000) [IDChiTiet], [IDHoaDon], [IDMon], [SoLuong], [DonGia], [ThanhTien], [ThoiGianDatMon]
+                     FROM [QLTiemNet].[dbo].[ChiTietHoaDon]";
+
+            // Sử dụng using để đảm bảo tài nguyên được giải phóng đúng cách
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                try
+                {
+                    SqlDataAdapter adapter = new SqlDataAdapter(query, connection);
+                    DataTable dt = new DataTable();
+                    adapter.Fill(dt);
+
+                    // Gán nguồn dữ liệu cho DataGridView
+                    dgvOrder.DataSource = dt;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Lỗi khi tải dữ liệu: " + ex.Message);
+                }
             }
         }
     } 

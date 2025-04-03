@@ -55,7 +55,7 @@
             this.dgvThucDon.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
             this.dgvThucDon.Size = new System.Drawing.Size(418, 399);
             this.dgvThucDon.TabIndex = 0;
-            //this.dgvThucDon.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvThucDon_CellContentClick);
+            this.dgvThucDon.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvThucDon_CellContentClick);
             // 
             // label1
             // 

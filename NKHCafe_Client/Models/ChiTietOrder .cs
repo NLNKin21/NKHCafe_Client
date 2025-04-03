@@ -14,6 +14,7 @@ namespace NKHCafe_Client.Models
         public decimal DonGia { get; set; }
         public decimal ThanhTien => SoLuong * DonGia;
 
+        public ChiTietOrder() { }
         public ChiTietOrder(int id, string ten, int sl, decimal gia)
         {
             IDMon = id;

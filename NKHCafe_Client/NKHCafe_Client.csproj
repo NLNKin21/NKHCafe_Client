@@ -33,6 +33,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Data.SqlClient, Version=4.6.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
@@ -84,6 +87,7 @@
     <Compile Include="Models\HoaDon.cs" />
     <Compile Include="Models\TaiKhoan.cs" />
     <Compile Include="Models\ThucDon.cs" />
+    <Compile Include="Models\YeuCauOrder.cs" />
     <Compile Include="Network\MessageHandler.cs" />
     <Compile Include="Network\SocketClient.cs" />
     <Compile Include="Program.cs" />
